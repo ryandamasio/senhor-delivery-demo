@@ -5,9 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Senhor Delivery Iguape</title>
 <meta name="theme-color" content="#12061f">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bowlby+One&family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <style>
 :root{
   --bg:#12061f; --bg2:#1a0a2e; --card:#231039; --card2:#2e1550;
@@ -457,7 +459,7 @@ textarea,.field{width:100%;margin-top:10px;background:var(--card);border:1px sol
         <div class="d" id="pdDesc"></div>
         <div class="p" id="pdPrice"></div>
         <div class="opts" id="pdOpts"></div>
-        <textarea id="pdObs" rows="2" placeholder="Alguma observação? Ex: sem cebola, caprichar no recheio..."></textarea>
+        <textarea id="pdObs" rows="2" maxlength="140" placeholder="Alguma observação? Ex: sem cebola, caprichar no recheio..."></textarea>
         <div style="height:14px"></div>
       </div>
       <div class="pd-foot">
@@ -474,8 +476,8 @@ textarea,.field{width:100%;margin-top:10px;background:var(--card);border:1px sol
         <div id="upsell"></div>
         <div class="sum" id="cartSum"></div>
         <div class="lbl">Entrega</div>
-        <input class="field" id="cName" placeholder="Seu nome">
-        <input class="field" id="cAddr" placeholder="Endereço (rua, nº, bairro)">
+        <input class="field" id="cName" placeholder="Seu nome" maxlength="60" autocomplete="name">
+        <input class="field" id="cAddr" placeholder="Endereço (rua, nº, bairro)" maxlength="150" autocomplete="street-address">
         <div class="lbl">Pagamento</div>
         <div class="pay" id="pay"><button class="on">💠 Pix</button><button>💳 Cartão</button><button>💵 Dinheiro</button></div>
         <div style="height:16px"></div>
@@ -573,7 +575,15 @@ const $=s=>document.querySelector(s), app=$("#app");
 const brl=v=>"R$ "+v.toFixed(2).replace(".",",");
 const ALL=[];MENU.forEach(c=>c.items.forEach((it,i)=>{it.id=c.id+"-"+i;it.cat=c;ALL.push(it)}));
 const byId=id=>ALL.find(x=>x.id===id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const clip=(s,n)=>String(s||"").replace(/[\u0000-\u001f]/g," ").trim().slice(0,n);
+/* preço sempre recalculado a partir do cardápio oficial, nunca do que veio salvo */
+function priceFor(it,ops){const all=(it.opt?it.opt.items:[]).concat(it.cat.id==="acai"?ACAI_ADD.items:[]);
+  return it.p+ops.reduce((a,n)=>{const f=all.find(x=>x[0]===n);return a+(f?f[1]:0)},0)}
 let cart=[];try{cart=JSON.parse(localStorage.getItem("sd-cart2")||"[]")}catch(e){}
+if(!Array.isArray(cart))cart=[];
+cart=cart.filter(x=>x&&byId(x.id)).map(x=>{const it=byId(x.id);const ops=(Array.isArray(x.ops)?x.ops:[]).map(String).filter(n=>((it.opt?it.opt.items:[]).concat(it.cat.id==="acai"?ACAI_ADD.items:[])).some(o=>o[0]===n));
+  const q=Math.min(50,Math.max(1,parseInt(x.q)||1)),obs=clip(x.obs,140);return{key:x.id+"|"+ops.join(",")+"|"+obs,id:x.id,n:it.n,q,ops,obs,unit:priceFor(it,ops)}});
 function save(){try{localStorage.setItem("sd-cart2",JSON.stringify(cart))}catch(e){}}
 const vib=()=>{try{navigator.vibrate&&navigator.vibrate(12)}catch(e){}};
 const imgOf=it=>it.img?`<img src="img/${it.img}" alt="" loading="lazy">`:(it.emoji||it.cat.emoji);
@@ -650,7 +660,7 @@ function pdTotal(){$("#pdQ").textContent=pq;$("#pdTot").textContent=brl(pdUnit()
 function pdStep(d){pq=Math.max(1,pq+d);pdTotal();vib()}
 function pdAdd(){addCart(cur,pq,pdSel().map(x=>x[0]),$("#pdObs").value.trim(),pdUnit());closeAll();toast("✅ "+cur.n+" na sacola!")}
 function quickId(id,el){const it=byId(id);if(it.opt&&!it.opt.multi){openPd(id);return}addCart(it,1,[],"",it.p);fly(el,it);toast("✅ "+it.n+" na sacola!")}
-function addCart(it,q,ops,obs,unit){vib();const key=it.id+"|"+ops.join(",")+"|"+obs;const ex=cart.find(x=>x.key===key);
+function addCart(it,q,ops,obs,unit){vib();obs=clip(obs,140);unit=priceFor(it,ops);q=Math.min(50,q);const key=it.id+"|"+ops.join(",")+"|"+obs;const ex=cart.find(x=>x.key===key);
   if(ex)ex.q+=q;else cart.push({key,id:it.id,n:it.n,q,ops,obs,unit});save();updateBar(true);render($("#q").value)}
 function updateBar(b){const n=cart.reduce((a,x)=>a+x.q,0),t=cart.reduce((a,x)=>a+x.q*x.unit,0);
   $("#cn").textContent=n;$("#ct").textContent=brl(t);const bar=$("#cartbar");bar.classList.toggle("show",n>0);
@@ -664,7 +674,7 @@ function fly(el,it){const r=el.getBoundingClientRect(),d=document.createElement(
 function openCart(){renderCart();show("#cart")}
 function renderCart(){
   if(!cart.length){$("#cartItems").innerHTML=`<p style="color:var(--mut);padding:30px 0;text-align:center">Sua sacola está vazia 🙃</p>`;$("#cartSum").innerHTML="";$("#upsell").innerHTML="";$("#ftot").textContent=brl(0);return}
-  $("#cartItems").innerHTML=cart.map((x,i)=>{const it=byId(x.id);return `<div class="ci"><div class="th ${it.img?"":it.cat.g}">${imgOf(it)}</div><div class="tx"><b>${x.n}</b>${x.ops.length?`<p>+ ${x.ops.join(", ")}</p>`:""}${x.obs?`<p>Obs: ${x.obs}</p>`:""}<div class="pr">${brl(x.unit*x.q)}</div></div><div class="stepper"><button onclick="cq(${i},-1)">−</button><span>${x.q}</span><button onclick="cq(${i},1)">+</button></div></div>`}).join("");
+  $("#cartItems").innerHTML=cart.map((x,i)=>{const it=byId(x.id);return `<div class="ci"><div class="th ${it.img?"":it.cat.g}">${imgOf(it)}</div><div class="tx"><b>${esc(x.n)}</b>${x.ops.length?`<p>+ ${esc(x.ops.join(", "))}</p>`:""}${x.obs?`<p>Obs: ${esc(x.obs)}</p>`:""}<div class="pr">${brl(x.unit*x.q)}</div></div><div class="stepper"><button onclick="cq(${i},-1)">−</button><span>${x.q}</span><button onclick="cq(${i},1)">+</button></div></div>`}).join("");
   const hasDrink=cart.some(x=>x.id.startsWith("bebidas")||x.id.startsWith("combos"));
   $("#upsell").innerHTML=hasDrink?"":`<div class="upsell"><span class="e">🥤</span><div><b>Bateu a sede?</b>Coca-Cola 2L geladinha por R$ 16</div><button onclick="quickId('bebidas-5',this);renderCart()">Adicionar</button></div>`;
   const s=cart.reduce((a,x)=>a+x.q*x.unit,0);
@@ -685,8 +695,8 @@ function closeDone(){$("#done").classList.remove("show")}
 function sendWA(){const s=cart.reduce((a,x)=>a+x.q*x.unit,0),pay=$("#pay .on").textContent.replace(/^\S+\s/,"");
   let m=`*NOVO PEDIDO #${orderNo} — Senhor Delivery* 👑\n\n`;
   cart.forEach(x=>{m+=`• ${x.q}x ${x.n} — ${brl(x.unit*x.q)}\n`;if(x.ops.length)m+=`   + ${x.ops.join(", ")}\n`;if(x.obs)m+=`   Obs: ${x.obs}\n`});
-  m+=`\nSubtotal: ${brl(s)}\nEntrega: ${brl(FEE)}\n*Total: ${brl(s+FEE)}*\n\n👤 ${$("#cName").value||"-"}\n📍 ${$("#cAddr").value||"-"}\n💳 ${pay}`;
-  advanceTrack();window.open(`https://wa.me/${WA}?text=${encodeURIComponent(m)}`,"_blank")}
+  m+=`\nSubtotal: ${brl(s)}\nEntrega: ${brl(FEE)}\n*Total: ${brl(s+FEE)}*\n\n👤 ${clip($("#cName").value,60)||"-"}\n📍 ${clip($("#cAddr").value,150)||"-"}\n💳 ${pay}`;
+  advanceTrack();window.open(`https://wa.me/${WA}?text=${encodeURIComponent(m)}`,"_blank","noopener")}
 function confetti(){const c=$("#confetti"),x=c.getContext("2d");c.width=c.offsetWidth*2;c.height=c.offsetHeight*2;
   const cols=["#ffc61a","#ff9500","#ef233c","#8b2cf5","#25d366","#fff"];
   const P=Array.from({length:160},()=>({x:c.width/2,y:c.height*.25,vx:(Math.random()-.5)*28,vy:-Math.random()*26-6,w:8+Math.random()*10,h:5+Math.random()*7,r:Math.random()*6,vr:(Math.random()-.5)*.4,c:cols[Math.random()*cols.length|0]}));
